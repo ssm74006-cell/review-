@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, Chat, GenerateContentResponse } from "@google/genai";
-import { Category, Review } from '../types';
+import { Category, Review, GeminiContent } from '../types';
 
 if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable not set");
@@ -39,6 +39,18 @@ const reviewSchema = {
 };
 
 export const fetchReviews = async (category: Category, productName: string): Promise<Review[]> => {
+  const cacheKey = `prodlyx_reviews_${category}_${productName.toLowerCase().replace(/\s+/g, '_')}`;
+
+  try {
+    const cachedData = localStorage.getItem(cacheKey);
+    if (cachedData) {
+      console.log(`Returning cached reviews for: ${productName}`);
+      return JSON.parse(cachedData);
+    }
+  } catch (error) {
+    console.warn("Could not read reviews from local storage", error);
+  }
+
   try {
     const prompt = `Generate 5 realistic product reviews for the product "${productName}" in the "${category}" category. Provide detailed comments, a star rating between 1 and 5, and a reviewer name. Make sure each review has a unique ID.`;
 
@@ -53,6 +65,13 @@ export const fetchReviews = async (category: Category, productName: string): Pro
 
     const jsonString = response.text.trim();
     const reviews = JSON.parse(jsonString) as Review[];
+    
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify(reviews));
+    } catch (error) {
+      console.warn("Could not save reviews to local storage", error);
+    }
+
     return reviews;
   } catch (error) {
     console.error("Error fetching reviews:", error);
@@ -60,9 +79,10 @@ export const fetchReviews = async (category: Category, productName: string): Pro
   }
 };
 
-export const createChatSession = (): Chat => {
+export const createChatSession = (history?: GeminiContent[]): Chat => {
   return ai.chats.create({
     model: 'gemini-2.5-flash',
+    history,
     config: {
       systemInstruction: 'You are a friendly and helpful product expert from prodlyx. You can answer questions about products, find reviews, and help users decide what to buy. Keep your responses concise and helpful.',
     },

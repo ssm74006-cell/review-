@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Chat } from '@google/genai';
-import { ChatMessage } from '../types';
+import { ChatMessage, GeminiContent } from '../types';
 import { createChatSession, sendMessageToChat } from '../services/geminiService';
+
+const CHAT_HISTORY_KEY = 'prodlyx_chat_history';
 
 const ChatBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
     const isUser = message.sender === 'user';
@@ -15,22 +17,48 @@ const ChatBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
     );
 };
 
+const convertHistoryToGeminiFormat = (history: ChatMessage[]): GeminiContent[] => {
+    // Skip the initial bot greeting message as it's not part of the conversational history for the model
+    return history.slice(1).map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.text }]
+    }));
+};
+
 const ChatbotPage: React.FC = () => {
     const [chat, setChat] = useState<Chat | null>(null);
-    const [history, setHistory] = useState<ChatMessage[]>([
-        { sender: 'bot', text: "Hello! I'm the prodlyx AI assistant. How can I help you find the perfect product today?" }
-    ]);
+    const [history, setHistory] = useState<ChatMessage[]>(() => {
+        try {
+            const savedHistory = localStorage.getItem(CHAT_HISTORY_KEY);
+            return savedHistory ? JSON.parse(savedHistory) : [{ sender: 'bot', text: "Hello! I'm the prodlyx AI assistant. How can I help you find the perfect product today?" }];
+        } catch (error) {
+            console.warn("Could not load chat history:", error);
+            return [{ sender: 'bot', text: "Hello! I'm the prodlyx AI assistant. How can I help you find the perfect product today?" }];
+        }
+    });
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const chatSession = createChatSession();
+        const geminiHistory = convertHistoryToGeminiFormat(history);
+        const chatSession = createChatSession(geminiHistory);
         setChat(chatSession);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [history]);
+    
+    useEffect(() => {
+        try {
+            if (history.length > 1) { // Don't save if only the initial message exists
+                localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history));
+            }
+        } catch (error) {
+            console.warn("Could not save chat history:", error);
+        }
     }, [history]);
 
     const handleSendMessage = async (e: React.FormEvent) => {

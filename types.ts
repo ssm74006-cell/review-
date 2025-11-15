@@ -20,3 +20,12 @@ export interface ChatMessage {
   sender: 'user' | 'bot';
   text: string;
 }
+
+export interface GeminiPart {
+  text: string;
+}
+
+export interface GeminiContent {
+  role: 'user' | 'model';
+  parts: GeminiPart[];
+}
